@@ -17,21 +17,20 @@ jobs:
           if [ -f "PokerLab-android(1).zip" ]; then
             echo "Extracting PokerLab-android(1).zip..."
             unzip -o "PokerLab-android(1).zip"
-            # Move contents to root if they are inside PokerLab/
             if [ -d PokerLab ]; then
-              cp -r PokerLab/* .
-              # Keep existing workflow and other files
+              cp -rn PokerLab/* . || true
+              # Overwrite sources with original from zip
+              cp -r PokerLab/app/src/main/java/com/pokerlab/* app/src/main/java/com/pokerlab/ || true
             fi
           elif [ -f "PokerLab-android.zip" ]; then
             echo "Extracting PokerLab-android.zip..."
             unzip -o "PokerLab-android.zip"
             if [ -d PokerLab ]; then
-              cp -r PokerLab/* .
+              cp -rn PokerLab/* . || true
+              cp -r PokerLab/app/src/main/java/com/pokerlab/* app/src/main/java/com/pokerlab/ || true
             fi
-          else
-            echo "No source zip found, using existing sources"
           fi
-          ls -la
+          echo "=== Sources after extract ==="
           ls -la app/src/main/java/com/pokerlab/ || true
 
       - name: Set up JDK 17
@@ -40,23 +39,20 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'tools platform-tools platforms;android-35 build-tools;35.0.0'
 
-      - name: Make gradlew executable / generate wrapper
+      - name: Grant execute permission for gradlew
         run: |
-          if [ -f gradlew ]; then
-            chmod +x gradlew
-          else
+          if [ ! -f gradlew ]; then
             gradle wrapper --gradle-version 8.7
-            chmod +x gradlew
           fi
+          chmod +x gradlew
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -64,3 +60,4 @@ jobs:
           name: PokerLab-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
+          if-no-files-found: warn
