@@ -12,6 +12,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Extract source zip if present
+        run: |
+          if [ -f "PokerLab-android(1).zip" ]; then
+            echo "Extracting PokerLab-android(1).zip..."
+            unzip -o "PokerLab-android(1).zip"
+            # Move contents to root if they are inside PokerLab/
+            if [ -d PokerLab ]; then
+              cp -r PokerLab/* .
+              # Keep existing workflow and other files
+            fi
+          elif [ -f "PokerLab-android.zip" ]; then
+            echo "Extracting PokerLab-android.zip..."
+            unzip -o "PokerLab-android.zip"
+            if [ -d PokerLab ]; then
+              cp -r PokerLab/* .
+            fi
+          else
+            echo "No source zip found, using existing sources"
+          fi
+          ls -la
+          ls -la app/src/main/java/com/pokerlab/ || true
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -24,7 +46,7 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Make gradlew executable
+      - name: Make gradlew executable / generate wrapper
         run: |
           if [ -f gradlew ]; then
             chmod +x gradlew
