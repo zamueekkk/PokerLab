@@ -137,3 +137,22 @@ fun sidePotEV(
     }
     return ev
 }
+
+fun calcEvSum(hands: List<Hand>): EvSum {
+    var n = 0
+    var real = 0.0
+    var ev = 0.0
+    var pend = 0.0
+    var unk = 0
+    var w = 0
+    var x = 0.0
+    for (h in hands) {
+        if (h.eq == null) { unk++; continue }
+        n++
+        real += h.nb
+        ev += h.eq.ev
+        if (h.nb > 0) w++
+        x += h.eq.e
+    }
+    return EvSum(n, doubleArrayOf(real), doubleArrayOf(ev), doubleArrayOf(pend), doubleArrayOf(unk.toDouble()), w, x)
+}
