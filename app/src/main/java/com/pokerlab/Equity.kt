@@ -6,9 +6,8 @@ import kotlin.math.min
 fun CI(x: String): Int = "23456789TJQKA".indexOf(x[0]) * 4 + "cdhs".indexOf(x[1])
 
 private fun straightTop(m: Int): Int {
-    val r = (0..12).map { if ((m shr it) and 1 == 1) 1 else 0 }
-    for (i in 12 downTo 3) if (r[i] + r[i - 1] + r[i - 2] + r[i - 3] + r[i - 4] == 5) return i
-    if (r[12] + r[0] + r[1] + r[2] + r[3] == 5) return 3
+    val q = (m shl 1) or ((m shr 12) and 1)
+    for (h in 13 downTo 4) if (((q shr (h - 4)) and 31) == 31) return h - 1
     return -1
 }
 
@@ -75,6 +74,8 @@ fun rank7(c: IntArray): Int {
     for (k in kick) v = (v shl 4) or k
     return v
 }
+
+data class EvSum(val n: Int, val real: DoubleArray, val ev: DoubleArray, val pend: DoubleArray, val unk: DoubleArray, val w: Int, val x: Double)
 
 fun equityMulti(
     holes: List<List<String>>,
