@@ -15,7 +15,6 @@ jobs:
       - name: Extract source zip if present
         run: |
           set -x
-          # Prefer the improved zip first
           if [ -f "POkerlab mejorado.zip" ]; then
             echo "Found POkerlab mejorado.zip"
             unzip -o "POkerlab mejorado.zip"
@@ -30,7 +29,6 @@ jobs:
             unzip -o "PokerLab-android.zip"
           fi
 
-          # Handle common folder structures after unzip
           if [ -d PokerLab ]; then
             echo "Copying from PokerLab/ folder..."
             cp -r PokerLab/app . 2>/dev/null || true
@@ -41,14 +39,13 @@ jobs:
             cp -n PokerLab/gradle/wrapper/gradle-wrapper.properties gradle/wrapper/ 2>/dev/null || true
           fi
 
-          # Also try if files landed at root
           if [ -d app/src/main/java ]; then
             echo "Sources already at expected location"
           fi
 
           echo "=== Current sources ==="
           ls -la app/src/main/java/com/pokerlab/ 2>/dev/null || echo "No sources folder yet"
-          find . -name "*.kt" | head -30
+          find . -name "*.kt" | head -20
           ls -la
 
       - name: Set up JDK 17
@@ -70,29 +67,46 @@ jobs:
           fi
           chmod +x gradlew
 
-      - name: Configure release to use debug signing (installable APK)
+      - name: Add signing config for release
         run: |
-          # Make release builds signable with the default debug keystore
-          # so the resulting APK can be installed without a custom keystore.
-          cat >> app/build.gradle.kts << 'EOF'
-
-android {
+          # Patch build.gradle.kts to sign release with debug keystore (installable)
+          python3 - << 'PY'
+          from pathlib import Path
+          p = Path("app/build.gradle.kts")
+          text = p.read_text()
+          # Insert signingConfigs and update release buildType
+          if "signingConfigs" not in text:
+              # Add after defaultConfig block
+              insert = '''
     signingConfigs {
         create("release") {
-            storeFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
+            storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
     }
-    buildTypes {
-        getByName("release") {
-            signingConfig = signingConfigs.getByName("release")
+'''
+              text = text.replace("    defaultConfig {", insert + "    defaultConfig {", 1)
+              text = text.replace(
+                  """    buildTypes {
+        release {
             isMinifyEnabled = false
         }
-    }
-}
-EOF
+    }""",
+                  """    buildTypes {
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
+        }
+    }"""
+              )
+              p.write_text(text)
+              print("Patched app/build.gradle.kts successfully")
+          else:
+              print("signingConfigs already present")
+          print(p.read_text())
+          PY
 
       - name: Build Release APK
         run: ./gradlew assembleRelease --no-daemon --stacktrace
