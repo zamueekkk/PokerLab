@@ -12,40 +12,115 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract source zip if present
+      - name: Extract source zip (prefer newest)
         run: |
           set -x
-          if [ -f "POkerlab mejorado.zip" ]; then
-            echo "Found POkerlab mejorado.zip"
-            unzip -o "POkerlab mejorado.zip"
-          elif [ -f "PokerLab actualizado.zip" ]; then
-            echo "Found PokerLab actualizado.zip"
-            unzip -o "PokerLab actualizado.zip"
-          elif [ -f "PokerLab-android(1).zip" ]; then
-            echo "Found PokerLab-android(1).zip"
-            unzip -o "PokerLab-android(1).zip"
-          elif [ -f "PokerLab-android.zip" ]; then
-            echo "Found PokerLab-android.zip"
-            unzip -o "PokerLab-android.zip"
+          ZIP=""
+          for f in \
+            "PokerLab-android-26-nov-16-14.zip" \
+            "POkerlab mejorado.zip" \
+            "PokerLab actualizado.zip" \
+            "PokerLab-android(1).zip" \
+            "PokerLab-android.zip"
+          do
+            if [ -f "$f" ]; then
+              ZIP="$f"
+              break
+            fi
+          done
+
+          if [ -n "$ZIP" ]; then
+            echo "Extracting $ZIP"
+            unzip -o "$ZIP"
           fi
 
           if [ -d PokerLab ]; then
             echo "Copying from PokerLab/ folder..."
             cp -r PokerLab/app . 2>/dev/null || true
-            cp -n PokerLab/build.gradle.kts . 2>/dev/null || true
-            cp -n PokerLab/settings.gradle.kts . 2>/dev/null || true
-            cp -n PokerLab/gradle.properties . 2>/dev/null || true
+            cp -f PokerLab/build.gradle.kts . 2>/dev/null || true
+            cp -f PokerLab/settings.gradle.kts . 2>/dev/null || true
+            cp -f PokerLab/gradle.properties . 2>/dev/null || true
             mkdir -p gradle/wrapper
-            cp -n PokerLab/gradle/wrapper/gradle-wrapper.properties gradle/wrapper/ 2>/dev/null || true
+            cp -f PokerLab/gradle/wrapper/gradle-wrapper.properties gradle/wrapper/ 2>/dev/null || true
+            cp -f PokerLab/.gitignore . 2>/dev/null || true
           fi
 
-          if [ -d app/src/main/java ]; then
-            echo "Sources already at expected location"
-          fi
+          echo "=== Sources ==="
+          find app/src -name "*.kt" 2>/dev/null | head -30 || echo "No kt yet"
 
-          echo "=== Current sources ==="
-          ls -la app/src/main/java/com/pokerlab/ 2>/dev/null || echo "No sources folder yet"
-          find . -name "*.kt" | head -20
+      - name: Apply release build config (performance)
+        run: |
+          cat > app/build.gradle.kts << 'EOF'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+              id("org.jetbrains.kotlin.plugin.compose")
+          }
+
+          android {
+              namespace = "com.pokerlab"
+              compileSdk = 35
+
+              defaultConfig {
+                  applicationId = "com.pokerlab"
+                  minSdk = 26
+                  targetSdk = 35
+                  versionCode = 2
+                  versionName = "1.1"
+              }
+
+              buildTypes {
+                  release {
+                      isMinifyEnabled = true
+                      isShrinkResources = true
+                      proguardFiles(
+                          getDefaultProguardFile("proguard-android-optimize.txt"),
+                          "proguard-rules.pro"
+                      )
+                      signingConfig = signingConfigs.getByName("debug")
+                  }
+                  debug {
+                      isMinifyEnabled = false
+                  }
+              }
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+              buildFeatures {
+                  compose = true
+              }
+          }
+
+          dependencies {
+              val bom = platform("androidx.compose:compose-bom:2024.09.03")
+              implementation(bom)
+              implementation("androidx.core:core-ktx:1.13.1")
+              implementation("androidx.core:core-splashscreen:1.0.1")
+              implementation("androidx.activity:activity-compose:1.9.2")
+              implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
+              implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
+              implementation("androidx.compose.ui:ui")
+              implementation("androidx.compose.ui:ui-graphics")
+              implementation("androidx.compose.foundation:foundation")
+              implementation("androidx.compose.material3:material3")
+              implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+          }
+          EOF
+
+          cat > app/proguard-rules.pro << 'EOF'
+          -keep class androidx.compose.** { *; }
+          -keep class kotlin.** { *; }
+          -keep class kotlinx.** { *; }
+          -dontwarn androidx.compose.**
+          -dontwarn kotlin.**
+          -keep class com.pokerlab.** { *; }
+          EOF
+
+          echo "Release config applied"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -54,7 +129,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v4
+        uses: android-actions/setup-android@v3
 
       - name: Create local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > local.properties
@@ -66,13 +141,14 @@ jobs:
           fi
           chmod +x gradlew
 
-      - name: Build Debug APK (properly signed and installable)
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+      - name: Build Release APK (optimized, debug-signed)
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
 
-      - name: Upload APK
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
-          name: PokerLab-installable
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: PokerLab-release
+          path: |
+            app/build/outputs/apk/release/*.apk
           retention-days: 30
-          if-no-files-found: warn
+          if-no-files-found: error
