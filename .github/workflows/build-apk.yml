@@ -45,7 +45,7 @@ jobs:
 
           echo "=== Current sources ==="
           ls -la app/src/main/java/com/pokerlab/ 2>/dev/null || echo "No sources folder yet"
-          find . -name "*.kt" | head -20
+          find . -name "*.kt" | head -30
           ls -la
 
       - name: Set up JDK 17
@@ -67,47 +67,6 @@ jobs:
           fi
           chmod +x gradlew
 
-      - name: Add signing config for release
-        run: |
-          # Patch build.gradle.kts to sign release with debug keystore (installable)
-          python3 - << 'PY'
-          from pathlib import Path
-          p = Path("app/build.gradle.kts")
-          text = p.read_text()
-          # Insert signingConfigs and update release buildType
-          if "signingConfigs" not in text:
-              # Add after defaultConfig block
-              insert = '''
-    signingConfigs {
-        create("release") {
-            storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
-        }
-    }
-'''
-              text = text.replace("    defaultConfig {", insert + "    defaultConfig {", 1)
-              text = text.replace(
-                  """    buildTypes {
-        release {
-            isMinifyEnabled = false
-        }
-    }""",
-                  """    buildTypes {
-        release {
-            isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
-        }
-    }"""
-              )
-              p.write_text(text)
-              print("Patched app/build.gradle.kts successfully")
-          else:
-              print("signingConfigs already present")
-          print(p.read_text())
-          PY
-
       - name: Build Release APK
         run: ./gradlew assembleRelease --no-daemon --stacktrace
 
@@ -115,6 +74,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PokerLab-release
-          path: app/build/outputs/apk/release/app-release.apk
+          path: app/build/outputs/apk/release/app-release-unsigned.apk
           retention-days: 30
           if-no-files-found: warn
